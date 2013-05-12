@@ -51,8 +51,9 @@ vop =
 
   "#{ops.close.op}":
     class close
-      ({ @free, @arity, body }, global-env) ->
-        @body = prepare body, global-env
+      ({ @free, @arity, @body }, global-env) ->
+#        ({ @free, @arity, body }, global-env) ->
+#          @body = link body, global-env
       invoke: !->
         ++it.code-p
         it.acc = new prims.Closure (pop-n it.stack, @free), @arity, @body
@@ -65,15 +66,17 @@ vop =
         i = it.stack.length - 1 - @index
         it.stack[i] = new prims.Cell it.stack[i]
 
-  "#{ops.test.op}":
+#    "#{ops.test.op}":
+  \test :
     class test
-      ({ @skip-if-not }) ->
+      ({ @skip }) ->
       invoke: !->
         if it.acc is false
-          it.code-p += @skip-if-not + 1
+          it.code-p += @skip + 1
         else ++it.code-p
 
-  "#{ops.skip.op}":
+#    "#{ops.skip.op}":
+  \skip :
     class skip
       ({ @skip }) ->
       invoke: !->
@@ -147,11 +150,29 @@ vop =
         it.frame  = it.stack.pop!
         it.env    = it.stack.pop!
 
-prepare = (bytecode, global-env = new ->) ->
-  bytecode.map (instr) ->
-    new vop[instr.op] instr, global-env
+link = (bytecode, global-env) ->
+  [].concat ...bytecode.map (link-instr _, global-env)
 
-run-prepared = (threaded) ->
+link-instr = (instr, global-env) ->
+  switch instr.op
+    case ops.test.op =>
+      pos = link instr.positive, global-env
+      neg = link instr.negative, global-env
+      [ new vop[\test] skip: (1 + length pos), global-env ].concat do
+        pos, [ new vop[\skip] skip: length neg ], neg
+    case ops.frame.op =>
+      call = link instr.proceed, global-env
+      rest = link instr.return-to, global-env
+      [ new vop[\frame] return-after: (length call), global-env ] ++ call ++ rest
+    case ops.close.op =>
+      [ new vop[ops.close.op] do
+          free  : instr.free
+          arity : instr.arity
+          body  : link instr.body, global-env
+          global-env ]
+    case _ => [ new vop[instr.op] instr, global-env ]
+
+run-linked = (threaded) ->
 
   regs =
     acc    : void
@@ -176,8 +197,8 @@ run-prepared = (threaded) ->
   regs.acc
 
 run = (bytecode, global-env = new ->) ->
-  prep = prepare bytecode, global-env
-  run-prepared prep
+  prep = link bytecode, global-env
+  run-linked prep
 
 
-module.exports = { run, prepare, run-prepared }
+module.exports = { run, link, run-linked }
