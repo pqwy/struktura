@@ -21,7 +21,7 @@ close = ((free, arity, body) -> { op: close.op, free, arity, body })
 box = (-> op: box.op, index: it)
   ..op = \box
 
-test = (-> op: test.op, skip-if-not: it)
+test = ((positive, negative) -> { op: test.op, positive, negative })
   ..op = \test
 
 assign-local = (-> op: assign-local.op, index: it)
@@ -30,7 +30,7 @@ assign-local = (-> op: assign-local.op, index: it)
 assign-free = (-> op: assign-free.op, index: it)
   ..op = \assign-free
 
-frame = (-> op: frame.op, return-after: it)
+frame = ((return-to, proceed) -> { op: frame.op, return-to, proceed })
   ..op = \frame
 
 argument = op: \argument
