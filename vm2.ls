@@ -52,8 +52,6 @@ vop =
   "#{ops.close.op}":
     class close
       ({ @free, @arity, @body }, global-env) ->
-#        ({ @free, @arity, body }, global-env) ->
-#          @body = link body, global-env
       invoke: !->
         ++it.code-p
         it.acc = new prims.Closure (pop-n it.stack, @free), @arity, @body
@@ -66,7 +64,6 @@ vop =
         i = it.stack.length - 1 - @index
         it.stack[i] = new prims.Cell it.stack[i]
 
-#    "#{ops.test.op}":
   \test :
     class test
       ({ @skip }) ->
@@ -75,7 +72,6 @@ vop =
           it.code-p += @skip + 1
         else ++it.code-p
 
-#    "#{ops.skip.op}":
   \skip :
     class skip
       ({ @skip }) ->
@@ -201,4 +197,4 @@ run = (bytecode, global-env = new ->) ->
   run-linked prep
 
 
-module.exports = { run, link, run-linked }
+module.exports = { run, run-linked, link }

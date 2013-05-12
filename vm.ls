@@ -84,7 +84,6 @@ run-linked = (bytecode, global-env) ->
         env[instr.index].value = acc
         acc := void
 
-#        case ops.frame.op =>
       case \frame =>
         ++code-p
         stack.push env, frame, code, (code-p + instr.return-after)
@@ -133,4 +132,4 @@ run = (bytecode, global-env = new ->) ->
   run-linked (link bytecode), global-env
 
 
-module.exports = { run }
+module.exports = { run, run-linked, link }
