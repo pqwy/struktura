@@ -4,18 +4,30 @@ require! [\util \ops \prims]
 pop-n = (s, n) ->
   for x from 0 til n then s.pop!
 
-run = (bytecode, global-env = new ->) ->
+link-instr = (instr) ->
+  switch instr.op
+    case ops.close.op =>
+      [ ops.close instr.free, instr.arity, link instr.body ]
+    case ops.test.op =>
+      pos = link instr.positive
+      neg = link instr.negative
+      [ { op: \jump-if-not, skip: 1 + length pos } ].concat do
+        pos, [ { op: \skip, skip: length neg } ], neg
+    case ops.frame.op =>
+      call = link instr.proceed
+      rest = link instr.return-to
+      [ { op: \frame, return-after: length call } ] ++ call ++ rest
+    case _ => [ instr ]
+
+link = (bytecode) ->
+  [].concat ...bytecode.map link-instr
+
+run-linked = (bytecode, global-env) ->
 
   [ acc, code-p, code, frame, env, stack ] = [ void, 0, bytecode, 0, \noenv, [] ]
 
   loop
     instr = code[code-p]
-
-#      console
-#        ..log "loop:"
-#        ..log " * acc:", acc
-#        ..log " * ins:", instr
-#        ..log " * stk:", stack
 
     switch instr.op
 
@@ -54,12 +66,12 @@ run = (bytecode, global-env = new ->) ->
         i = stack.length - 1 - instr.index
         stack[i] = new prims.Cell stack[i]
 
-      case ops.test.op =>
+      case \jump-if-not =>
         if acc is false
-          code-p += instr.skip-if-not + 1
+          code-p += instr.skip + 1
         else ++code-p
 
-      case ops.skip.op =>
+      case \skip =>
         code-p += instr.skip + 1
 
       case ops.assign-local.op =>
@@ -72,7 +84,8 @@ run = (bytecode, global-env = new ->) ->
         env[instr.index].value = acc
         acc := void
 
-      case ops.frame.op =>
+#        case ops.frame.op =>
+      case \frame =>
         ++code-p
         stack.push env, frame, code, (code-p + instr.return-after)
 
@@ -112,7 +125,12 @@ run = (bytecode, global-env = new ->) ->
 #        case ops.apply-native.op =>
 
 
-      case _ => throw "bad instruction: #{instr}"
+      case _ =>
+        console.error "bad instruction", util.inspect instr, {+colors, depth: null}
+        throw "bad instruction"
+
+run = (bytecode, global-env = new ->) ->
+  run-linked (link bytecode), global-env
 
 
 module.exports = { run }
