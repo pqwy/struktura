@@ -1,5 +1,8 @@
 
-require! \ops
+require! \./ops
+{ appends, init, merge, intercalate, compose-r, compose-l } =
+  require \./crap
+
 
 free-set = (x, bound = {}) ->
   switch typeof! x
@@ -82,8 +85,8 @@ compile-expr = (e, s, x, next) -->
             ...[ [ (static-refer v, e), ops.argument ] for v in freevec ]
             [ ops.close (length freeset), (length varset), appends do
                 [ ops.box n for v, n in x.1 when v of mutset ]
-                ( init exprs |> map (compile-expr new-e, new-s) |> composes ) do
-                    compile-tail new-e, new-s, (last exprs), x.1.length ]
+                init exprs |> map (compile-expr new-e, new-s) |> compose-r
+                  <| compile-tail new-e, new-s, (last exprs), x.1.length ]
             next
 
         case \if =>
@@ -102,16 +105,15 @@ compile-expr = (e, s, x, next) -->
 #            if next.0 is ret then call else [ frame, next, call ]
 
         case \native =>
-          ( intercalate ([ ops.argument ] ++), map (compile-expr e, s), x[1 to ]
-              |> reverse |> composes ) do
-            ( [ ops.apply-native (x.length - 2) ] ++ next )
+          intercalate ([ ops.argument ] ++), map (compile-expr e, s), tail x
+            |> compose-l <| [ ops.apply-native (x.length - 2) ] ++ next
 
         case _ =>
           argn = x.length - 1
 
           [ ops.frame next,
-            ( intercalate ([ ops.argument ] ++), map (compile-expr e, s), x
-                |> reverse |> composes ) [ ops.apply argn ] ]
+              intercalate ([ ops.argument ] ++), map (compile-expr e, s), x
+                |> compose-l <| [ ops.apply argn ] ]
 
     case _ => [ ops.constant x ] ++ next
 
@@ -132,9 +134,8 @@ compile-tail = (e, s, x, ret-len) -->
       case _ =>
         argn = x.length - 1
 
-        ( intercalate ([ ops.argument ] ++), map (compile-expr e, s), x
-            |> reverse |> composes ) do
-          [ (ops.shift argn, ret-len), (ops.apply argn) ]
+        intercalate ([ ops.argument ] ++), map (compile-expr e, s), x
+          |> compose-l <| [ (ops.shift argn, ret-len), (ops.apply argn) ]
 
   case _ => compile-expr e, s, x, [ ops.ret ret-len ]
 
@@ -143,24 +144,3 @@ compile = (x) -> compile-expr {}, {}, x, [ ops.halt ]
 
 module.exports = { compile }
 
-
-## util ##
-
-merge = (...dicts) ->
-  o = {}
-  for d in dicts then for k, v of d then o[k] = v
-  o
-
-appends = (...arrs) -> [].concat ...arrs
-
-composes = (fs) -> (x) ->
-  for f in reverse fs then x = f x
-  x
-
-init = (xs) -> xs[0 til xs.length - 1]
-
-intercalate = (e, arr) ->
-  r = []
-  for i from 0 til arr.length - 1 then r.push arr[i], e
-  r.push arr[arr.length - 1]
-  r
