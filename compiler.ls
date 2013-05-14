@@ -1,6 +1,6 @@
 
 require! \./ops
-{ appends, init, merge, intercalate, compose-r, compose-l } =
+{ init, merge, intercalate, compose-r, compose-l } =
   require \./crap
 
 
@@ -12,9 +12,12 @@ free-set = (x, bound = {}) ->
       switch x.0
         case \quote   => {}
         case \lambda  =>
-          free-set x[2 to ], (bound `merge` {[v, true] for v in x.1})
+          free-set x[2 to ], bound `merge` {[v, true] for v in x.1}
         case \if      =>
-          (free-set x.1, bound) `merge` (free-set x.2, bound) `merge` (free-set x.3, bound)
+          merge do
+            free-set x.1, bound
+            free-set x.2, bound
+            free-set x.3, bound
         case \set!    =>
           free-set x[1 to ], bound
         case \call/cc =>
@@ -22,7 +25,7 @@ free-set = (x, bound = {}) ->
         case \native =>
           free-set x[1 to ], bound
         case _ =>
-          x |> foldl ((a, x) -> (free-set x, bound) `merge` a), {}
+          x |> foldl ((a, x) -> a `merge` free-set x, bound), {}
     case _ => {}
 
 mutable-set = (x, vars = {}) ->
@@ -33,15 +36,20 @@ mutable-set = (x, vars = {}) ->
         case \lambda  =>
           {[v, true] for v, _ of mutable-set x[2 to ], vars when v not in x.1}
         case \if      =>
-          (mutable-set x.1, vars) `merge` (mutable-set x.2, vars) `merge` (mutable-set x.3, vars)
+          merge do
+            mutable-set x.1, vars
+            mutable-set x.2, vars
+            mutable-set x.3, vars
         case \set!    =>
-          (mutable-set x.2, vars) `merge` (if x.1 of vars then { +"#{x.1}" } else {})
+          merge do
+            mutable-set x.2, vars
+            if x.1 of vars then { +"#{x.1}" } else {}
         case \call/cc =>
           mutable-set x.1, vars
         case \native =>
           mutable-set x[1 to ], vars
         case _ =>
-          x |> foldl ((a, x) -> (mutable-set x, vars) `merge` a), {}
+          x |> foldl ((a, x) -> a `merge` mutable-set x, vars), {}
     case _ => {}
 
 static-refer = (x, e) ->
@@ -81,13 +89,15 @@ compile-expr = (e, s, x, next) -->
           new-e = local: x.1, free: freevec
           new-s = mutset `merge` {[v, true] for v, _ of freeset when v of s}
 
-          appends do
+          concat [
             ...[ [ (static-refer v, e), ops.argument ] for v in freevec ]
-            [ ops.close (length freeset), (length varset), appends do
+            [ ops.close (length freeset), (length varset), concat [
                 [ ops.box n for v, n in x.1 when v of mutset ]
                 init exprs |> map (compile-expr new-e, new-s) |> compose-r
-                  <| compile-tail new-e, new-s, (last exprs), x.1.length ]
+                  <| compile-tail new-e, new-s, (last exprs), x.1.length
+            ] ]
             next
+          ]
 
         case \if =>
 

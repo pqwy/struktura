@@ -6,8 +6,6 @@ merge = (...dicts) ->
   for d in dicts then for k, v of d then o[k] = v
   o
 
-appends = (...arrs) -> [].concat ...arrs
-
 compose-r = (fs) -> (x) ->
   for f in reverse fs then x = f x
   x
@@ -22,5 +20,5 @@ intercalate = (e, arr) ->
   r.push arr[arr.length - 1]
   r
 
-module.exports = { merge, appends, compose-r, compose-l, init, intercalate }
+module.exports = { merge, compose-r, compose-l, init, intercalate }
 

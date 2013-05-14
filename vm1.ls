@@ -1,28 +1,31 @@
 
 require! [\util \ops \prims]
-{ appends } = require \./crap
 
 pop-n = (s, n) ->
   for x from 0 til n then s.pop!
 
 link-instr = (instr) ->
   switch instr.op
+
     case ops.close.op =>
       [ ops.close instr.free, instr.arity, link instr.body ]
+
     case ops.test.op =>
       pos = link instr.positive
       neg = link instr.negative
-      appends do
+      concat [
         [ { op: \jump-if-not, skip: 1 + length pos } ], pos
         [ { op: \skip, skip: length neg } ], neg
+      ]
+
     case ops.frame.op =>
       call = link instr.proceed
       rest = link instr.return-to
-      [ { op: \frame, return-after: length call } ] ++ call ++ rest
+      concat [ [ { op: \frame, return-after: length call } ], call, rest ]
+
     case _ => [ instr ]
 
-link = (bytecode) ->
-  appends ...bytecode.map link-instr
+link = (bytecode) -> concat bytecode.map link-instr
 
 run-linked = (bytecode, global-env) ->
 

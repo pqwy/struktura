@@ -1,5 +1,5 @@
 
-require! [\util \./compiler \./prims \./vm \./vm2]
+require! [\util \./compiler \./prims \./vm1 \./vm2]
 
 show = (...xs, x) ->
   console.log ...xs, util.inspect x, {+colors, depth: null}

@@ -1,6 +1,5 @@
 
 require! [\util \ops \prims]
-{ appends } = require \./crap
 
 pop-n = (s, n) ->
   [ s.pop! for x from 0 til n ]
@@ -147,7 +146,7 @@ vop =
         it.env    = it.stack.pop!
 
 link = (bytecode, global-env) ->
-  appends ...bytecode.map (link-instr _, global-env)
+  concat bytecode.map (link-instr _, global-env)
 
 link-instr = (instr, global-env) ->
   switch instr.op
@@ -155,16 +154,16 @@ link-instr = (instr, global-env) ->
     case ops.test.op =>
       pos = link instr.positive, global-env
       neg = link instr.negative, global-env
-      appends do
+      concat [
         [ new vop[\test] skip: (1 + length pos), global-env ], pos
-        [ new vop[\skip] skip: length neg ], neg
+        [ new vop[\skip] skip: length neg ], neg ]
 
     case ops.frame.op =>
       call = link instr.proceed, global-env
       rest = link instr.return-to, global-env
-      appends do
+      concat [
         [ new vop[\frame] return-after: (length call), global-env ]
-        call, rest
+        call, rest ]
 
     case ops.close.op =>
       [ new vop[ops.close.op] do
