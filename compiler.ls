@@ -90,7 +90,7 @@ compile-expr = (e, s, x, next) -->
           new-s = mutset `merge` {[v, true] for v, _ of freeset when v of s}
 
           concat [
-            ...[ [ (static-refer v, e), ops.argument ] for v in freevec ]
+            ...reverse [ [ (static-refer v, e), ops.argument ] for v in freevec ]
             [ ops.close (length freeset), (length varset), concat [
                 [ ops.box n for v, n in x.1 when v of mutset ]
                 init exprs |> map (compile-expr new-e, new-s) |> compose-r
