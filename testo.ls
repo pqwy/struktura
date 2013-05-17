@@ -1,5 +1,5 @@
 
-require! [\util \./compiler \./prims \./vm1 \./vm2]
+require! [\util \./compiler \./prims \./vm1 \./vm2 \./vm3]
 
 show = (...xs, x) ->
   console.log ...xs, util.inspect x, {+colors, depth: null}
@@ -20,23 +20,23 @@ evaluate = (code, vm, env = new ->) ->
 
 e =
   \+    : (a, b) -> a + b
+  \*    : (a, b) -> a * b
   \=    : (a, b) -> a is b
   \cons : (a, b) -> new prims.Cons a, b
   \car  : -> it.car
   \cdr  : -> it.cdr
 
 evaluate do
-  [[\lambda [\f]
-    [\set! \f
-      [\lambda [\a \n]
-        [\if [\native \= \n 30001] \a
-          [\f [\native \+ \a \n] [\native \+ \n 1]]]]]
-    [\f 0 0]]
-   void]
-  vm2
-  e
+  [[\lambda [\a]
+    [\if false
+      [[\lambda [] [\set! \a [\native \+ \a 10]]]]
+#        [[\lambda [] [\set! \a [\native \+ \a 1 ]]]]]
+      [\set! \a 99]]
+    [\if true
+      [[\lambda [] [\set! \a [\native \* \a 3]] \a]]
+      [[\lambda [] [\set! \a [\native \* \a 5]] \a]]]]
+   1]
 
-#  show compiler.compile do
 #    [[\lambda [\f]
 #      [\set! \f
 #        [\lambda [\a \n]
@@ -44,3 +44,23 @@ evaluate do
 #            [\f [\native \+ \a \n] [\native \+ \n 1]]]]]
 #      [\f 0 0]]
 #     void]
+  vm3
+  e
+
+#  show compiler.compile do
+#  #    [[\lambda [\f]
+#  #      [\set! \f
+#  #        [\lambda [\a \n]
+#  #          [\if [\native \= \n 30001] \a
+#  #            [\f [\native \+ \a \n] [\native \+ \n 1]]]]]
+#  #      [\f 0 0]]
+#  #     void]
+#    [[\lambda [\a]
+#      [\if false
+#        [[\lambda [] [\set! \a [\native \+ \a 10]]]]
+#        [[\lambda [] [\set! \a [\native \+ \a 1 ]]]]]
+#      [\if true
+#        [[\lambda [] [\set! \a [\native \* \a 3]]]]
+#        [[\lambda [] [\set! \a [\native \* \a 5]]]]]
+#      \a] 1]
+

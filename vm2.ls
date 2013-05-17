@@ -123,8 +123,8 @@ vop =
             it.code   = it.acc.body
             it.env    = it.acc.env
             it.frame  = it.stack.length - 1
-          else throw "arity mismatch: have #{instr.args} want #{acc.arity}"
-        else throw "not fun: #{util.inspect acc}"
+          else throw "arity mismatch: have #{@args} want #{it.acc.arity}"
+        else throw "not fun: #{util.inspect it.acc}"
 
   "#{ops.apply-native.op}":
     class apply-native

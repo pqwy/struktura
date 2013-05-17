@@ -11,7 +11,11 @@ representation = (x) ->
 
 class ctx
 
-  -> [ @fragments, @props, @uniq ] = [ [], {}, 0 ]
+  ->
+    [ @fragments, @props, @uniq ] = [ [], {}, 0 ]
+
+  emit : (...frgs) ->
+    @fragments.push ...[ "  #{f}" for f in frgs ] ; @
 
   statement: (...frgs) ->
     @fragments.push ...[ "  #{f};\n" for f in frgs] ; @
@@ -25,6 +29,7 @@ class ctx
     p-name
 
   finalize: ->
+
     code = """
 ( function (regs, genv) {
   var stack = regs.stack ,
@@ -43,7 +48,7 @@ class ctx
     for pn, pv of @props then vop[pn] = pv
 
     console
-      ..log 'compile >>>\n'
+      ..log 'link >>>\n'
       ..log '', vop.invoke
       ..log '\n<<<'
     vop
@@ -52,19 +57,31 @@ class ctx
     notes |> each ~> @note it
     f.call @
 
-sanitized-eval = (str) ->
-  "use strict"
-  eval str
+sanitized-eval = (str) -> eval str
 
-link = (bc) -> weave (new ctx), bc
+link = (bc, genv) -> link-with-k bc, void, genv
 
-weave = (ctx, bc) ->
-  case empty bc =>
-    throw new Error "weave: reached end-of-stream"
+link-with-k = (bc, appendix) ->
+  case empty bc => appendix
+  case _        =>
+    c = new ctx
+    weave c, bc, appendix
+    c.finalize!
+
+weave = (ctx, bc, appendix) ->
+  case (empty bc) and (not appendix) =>
+  case (empty bc)                    => goto ctx, appendix
   case not ops.has-own-property bc.0.op =>
     console.log "ctx:", ctx, "bc:", bc
     throw new Error "weave: unknown instruction: #{bc.0.op}"
-  case _        => ops[bc.0.op] ctx, bc.0, bc[1 to ]
+  case _        => ops[bc.0.op] ctx, bc.0, bc[1 to ], appendix
+
+goto = (ctx, appendix) ->
+  ctx.with \goto ->
+    p-name = @constant appendix
+    @statement do
+      "regs.fun = this.#{p-name}"
+      "regs.acc = acc"
 
 ops =
 
@@ -73,78 +90,77 @@ ops =
       @statement do
         "regs.acc = acc"
         "throw 'halt'"
-      @finalize!
 
-  \refer-local : (ctx, { index }, rest) ->
+  \refer-local : (ctx, { index }, rest, a) ->
     ctx.with \refer-local ->
       @statement "acc = stack[frame - #{index}]"
-    weave ctx, rest
+    weave ctx, rest, a
 
-  \refer-free  : (ctx, { index }, rest) ->
+  \refer-free  : (ctx, { index }, rest, a) ->
     ctx.with \refer-free ->
       @statement "acc = env[ #{index} ]"
-    weave ctx, rest
+    weave ctx, rest, a
 
-  \refer-global : (ctx, { name }, rest) ->
+  \refer-global : (ctx, { name }, rest, a) ->
     ctx.with \refer-global ->
       @statement do
         "if ( ! (genv.hasOwnProperty ( '#{name}' )) ) {
           throw 'undefined #{name}';
         }"
         "acc = genv['#{name}']"
-    weave ctx, rest
+    weave ctx, rest, a
 
-  \indirect : (ctx, {}, rest) ->
+  \indirect : (ctx, {}, rest, a) ->
     ctx.with \indirect ->
       @statement "acc = acc.value"
-    weave ctx, rest
+    weave ctx, rest, a
 
-  \box : (ctx, { index }, rest) ->
+  \box : (ctx, { index }, rest, a) ->
     ctx.with \box ->
       @statement do
         "var $i = stack.length - #{index + 1}"
         "stack[$i] = new this.__cell__(stack[$i])"
-    weave ctx, rest
+    weave ctx, rest, a
 
-  \constant : (ctx, { value }, rest) ->
+  \constant : (ctx, { value }, rest, a) ->
     ctx.with \constant ->
       if rep = representation value
         @statement "acc = #{rep}"
       else
         p-name = @constant value
         @statement "acc = this.#{p-name}"
-    weave ctx, rest
+    weave ctx, rest, a
 
-  \assign-local : (ctx, { index }, rest) ->
+  \assign-local : (ctx, { index }, rest, a) ->
     ctx.with \assign-local ->
       @statement do
         "stack[frame - #{index}].value = acc"
         "acc = undefined"
-    weave ctx, rest
+    weave ctx, rest, a
 
-  \assign-free : (ctx, { index }, rest) ->
+  \assign-free : (ctx, { index }, rest, a) ->
     ctx.with \assign-free ->
       @statement do
         "env[ #{index} ].value = acc"
         "acc = undefined"
-    weave ctx, rest
+    weave ctx, rest, a
 
-  \argument : (ctx, {}, rest) ->
+  \argument : (ctx, {}, rest, a) ->
     ctx.with \argument ->
       @statement "stack.push(acc)"
-    weave ctx, rest
+    weave ctx, rest, a
 
-  \frame : (ctx, { return-to, proceed }) ->
+  \frame : (ctx, { return-to, proceed }, rest, a) ->
     ctx.with \frame ->
-      p-name = @constant link return-to
+      p-name = @constant link-with-k return-to, a
       @statement "stack.push(env, frame, this.#{p-name})"
     weave ctx, proceed
 
-  \shift : (ctx, { keep, discard }, rest) ->
+  \shift : (ctx, { keep, discard }, rest, a) ->
     ctx.with \shift ->
       if discard > 0
         @statement "stack.splice(stack.length - #{keep + discard}, #{discard})"
-    weave ctx, rest
+    weave ctx, rest, a
 
   \ret : (ctx, { discard }) ->
     ctx.with \ret ->
@@ -155,19 +171,27 @@ ops =
         "regs.fun   = stack.pop()"
         "regs.frame = stack.pop()"
         "regs.env   = stack.pop()"
-      @finalize!
+        "return"
 
-#  test = ((positive, negative) -> { op: test.op, positive, negative })
-#    ..op = \test
+  \test : (ctx, { positive, negative }, rest, a) ->
+    join-point = link-with-k rest, a
+    ctx.with \test ->
+      @emit "if (acc !== false) {"
+      weave ctx, positive, join-point
+      @emit " } else {"
+      weave ctx, negative, join-point
+      @emit "}"
 
-  \close : (ctx, { free, arity, body }, rest) ->
+  \close : (ctx, { free, arity, body }, rest, a) ->
     ctx.with \close ->
-      p-name = @constant link body
+      p-name = @constant link-with-k body
+      @statement "var $newenv = []"
+      if free > 0
+        @statement do
+          "for ( var $i = 0; $i < #{free}; $i++ ) { $newenv.push (stack.pop ()); }"
       @statement do
-        "var $newenv = []"
-        "for ( var $i = 0; $i < #{free}; $i++ ) { $newenv.push (stack.pop ()); }"
         "acc = new this.__closure__ ( $newenv, #{arity}, this.#{p-name} )"
-    weave ctx, rest
+    weave ctx, rest, a
 
   \apply : (ctx, { args }) ->
     ctx.with \apply ->
@@ -177,16 +201,16 @@ ops =
         "regs.fun   = acc.body"
         "regs.env   = acc.env"
         "regs.frame = stack.length - 1"
-      @finalize!
+        "return"
 
-  \apply-native : (ctx, { args }, rest) ->
+  \apply-native : (ctx, { args }, rest, a) ->
     ctx.with \apply-native ->
       @statement do
         "if (! (acc instanceof Function) ) { throw 'not (native) fun' }"
         "var $args = []"
         "for ( var $i = 0; $i < #{args}; $i++ ) { $args.push(stack.pop ()); }"
         "acc = acc.apply(null, $args)"
-    weave ctx, rest
+    weave ctx, rest, a
 
 
 dump = (x) ->
@@ -230,10 +254,19 @@ module.exports = { link, run-linked, run }
 
 require! \compiler
 
-console.log run do
-  compiler.compile do
-    [[\lambda [\x \y]
-      [\set! \x [[\lambda [] [\native \+ \x \y]]]]
-      \x]
-     1 999]
-  \+ : (a, b) -> a + b
+test-me = (prog) ->
+  require! \util
+  bc = compiler.compile prog
+  console.log util.inspect bc, {+colors, depth: null}
+  console.log run bc,
+    \+ : (a, b) -> a + b
+    \cons : (a, b) -> new prims.Cons a, b
+    \car  : -> it.car
+    \cdr  : -> it.cdr
+
+#  test-me do
+#      [[\lambda [] [\if false [\native \+ 1 2] [\native \+ 3 8]]]]
+#  #      [[\lambda [\x \y]
+#  #        [\set! \x [[\lambda [] [\native \+ \x \y]]]]
+#  #        \x]
+#  #       1 999]
