@@ -1,5 +1,5 @@
 
-require! [\util \./compiler \./prims \./vm1 \./vm2 \./vm3]
+require! [\util \./compiler \./prims \./vm1 \./vm2 \./vm3 \./vm4]
 
 show = (...xs, x) ->
   console.log ...xs, util.inspect x, {+colors, depth: null}
@@ -30,13 +30,11 @@ evaluate do
   [[\lambda [\a]
     [\if false
       [[\lambda [] [\set! \a [\native \+ \a 10]]]]
-#        [[\lambda [] [\set! \a [\native \+ \a 1 ]]]]]
-      [\set! \a 99]]
+      [[\lambda [] [\set! \a [\native \+ \a 1 ]]]]]
     [\if true
       [[\lambda [] [\set! \a [\native \* \a 3]] \a]]
       [[\lambda [] [\set! \a [\native \* \a 5]] \a]]]]
    1]
-
 #    [[\lambda [\f]
 #      [\set! \f
 #        [\lambda [\a \n]
@@ -44,7 +42,7 @@ evaluate do
 #            [\f [\native \+ \a \n] [\native \+ \n 1]]]]]
 #      [\f 0 0]]
 #     void]
-  vm3
+  vm4
   e
 
 #  show compiler.compile do
