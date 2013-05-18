@@ -3,7 +3,7 @@ require! \./prims
 
 class module-ctx
   ->
-    [ @uniq, @entry, @cpool, @blocks ] = [ 0, void, {}, {} ]
+    [ @uniq, @entry, @defs ] = [ 0, void, {}, {} ]
 
   constant : (x) ->
     switch typeof! x
@@ -12,17 +12,21 @@ class module-ctx
       case \Boolean   => "#{x}"
       case \Null      => "null"
       case \Undefined => "undefined"
-      case _ => throw new Error "constant not representable: #{x}"
-#      c-name = "__c__#{@uniq++}"
-#      @cpool[c-name] = v
-#      c-name
+      case _ =>
+        throw new Error "constant not representable: #{x}"
+        name = "__def__#{@uniq++}__"
+        @defs[name] = v
+        name
 
   link-block : (bc, next-block) ->
-    b-name = "__b__#{@uniq++}"
-    @entry ||= b-name
-    ( @blocks[b-name] = new block @ )
-      ..link-stream bc, next-block
-    b-name
+    case (empty bc) and next-block? => next-block
+    case empty bc                   => void
+    case _ =>
+      name = "__def__#{@uniq++}__"
+      @entry ||= name
+      ( @defs[name] = new block @ )
+        ..link-stream bc, next-block
+      name
 
   get-c-text : (x) ->
     switch typeof! x
@@ -40,16 +44,15 @@ class module-ctx
   acc   = regs.acc   ,
   frame = regs.frame ,
   fun   = regs.fun   ;
-#{ blk.fragments.join '' }
+#{ blk.fragments.join '\n' }
 })"""
 
   get-text : ->
     """
 ( function (prims) {
-  const __closure__ = prims.Closure;
-  const __cell__    = prims.Cell;
-#{ [ "const #{n} = #{@get-c-text v};" for n, v of @cpool ].join '\n' }
-#{ [ "const #{n} = #{@get-b-text v};" for n, v of @blocks ].join '\n' }
+  var __closure__ = prims.Closure;
+  var __cell__    = prims.Cell;
+#{ [ "var #{n} = #{@get-b-text v};" for n, v of @defs ].join '\n\n' }
   return { 'enter': #{@entry} };
 } )"""
 
@@ -67,9 +70,9 @@ class block
 
   (@module) -> @fragments = []
 
-  line      : (...xs) -> @emit ...xs, -> "  #{it}\n"
-  statement : (...xs) -> @emit ...xs, -> "  #{it};\n"
-  note      : (...xs) -> @emit ...xs, -> "\n  // #{it} \n"
+  line      : (...xs) -> @emit ...xs, -> "  #{it}"
+  statement : (...xs) -> @emit ...xs, -> "  #{it};"
+  note      : (...xs) -> @emit ...xs, -> "\n  // #{it}"
 
   emit : (...frgs, f) ->
     @fragments.push ...[ f frg for frg in frgs ] ; @
@@ -78,7 +81,7 @@ class block
 
     :stream for {op: instr}:op, i in bc
 
-      @note instr
+      @note "[ #{instr} ]"
 
       switch instr
 
@@ -183,7 +186,7 @@ class block
             "acc = acc.apply(null, $args)"
 
     if next-block?
-      @note \connect-block
+      @note " -> connect-block"
       @statement do
         "regs.fun = #{next-block}"
         "regs.acc = acc"
